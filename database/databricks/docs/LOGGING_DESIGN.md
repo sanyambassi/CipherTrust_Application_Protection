@@ -1,318 +1,282 @@
 # Logging Guide
 
-This guide explains how logging works in the Databricks UDF project today, how
-to configure it, where to find the logs, and how customers can forward those
-logs to external platforms such as Splunk.
+This guide describes the current logging behavior in the active
+`thales.databricks.integration` project.
 
-## What is implemented
+It focuses on:
 
-The project uses an internal Java logger:
+- what the current Java and Python runtimes emit
+- which logging-related settings are active today
+- where to look in Databricks when troubleshooting
+- how to use the current logging safely during support and operations
 
-- [ThalesLogger.java](E:\eclipse-workspace\thales.databricks.udf\src\main\java\ThalesLogger.java)
+## Current Logging Model
 
-The logger is already used by key runtime classes such as:
+The current runtime uses two main logging paths:
 
-- [ThalesDataBricksCRDPBulkService.java](E:\eclipse-workspace\thales.databricks.udf\src\main\java\ThalesDataBricksCRDPBulkService.java)
-- [ThalesDataBricksCRDPFPE.java](E:\eclipse-workspace\thales.databricks.udf\src\main\java\ThalesDataBricksCRDPFPE.java)
-- [ThalesDataBricksCADPFPE.java](E:\eclipse-workspace\thales.databricks.udf\src\main\java\ThalesDataBricksCADPFPE.java)
+- the Java runtime writes operational messages directly to console streams
+- the Python helper path uses the standard Python `logging` module
 
-The logger reads its runtime settings from:
+Databricks captures those driver and executor logs through its normal cluster
+logging behavior.
 
-- [udfConfig.properties](E:\eclipse-workspace\thales.databricks.udf\src\main\resources\udfConfig.properties)
+Current implementation references:
 
-via:
+- Java CRDP runtime:
+  [JavaCrdpService.java](/E:/codex/work/thales.databricks.integration/src/main/java/com/thales/databricks/integration/service/JavaCrdpService.java:1)
+- Java config loader:
+  [IntegrationConfig.java](/E:/codex/work/thales.databricks.integration/src/main/java/com/thales/databricks/integration/config/IntegrationConfig.java:1)
+- Python helper executor logging:
+  [executor.py](/E:/codex/work/thales.databricks.integration/src/thales_databricks_integration/executor.py:1)
+- runtime diagnostics helper:
+  [runtime_diagnostics.py](/E:/codex/work/thales.databricks.integration/notebooks/utils/runtime_diagnostics.py:1)
 
-- [ThalesDataBricksUdfConfig.java](E:\eclipse-workspace\thales.databricks.udf\src\main\java\ThalesDataBricksUdfConfig.java)
+## What Is Logged Today
 
-## Where logs go
+### Java runtime
 
-The current logger writes to standard console streams:
+The Java runtime currently emits:
 
-- `INFO`, `WARN`, and `DEBUG` go to `stdout`
-- `ERROR` goes to `stderr`
+- startup summary information to `stdout`
+- reveal fail-open events to `stderr`
+- exception text as part of thrown failures
+- optional request payload suffixes on some failure paths when payload debug
+  logging is enabled
 
-This means:
+Examples in the code:
 
-- driver-side execution writes to driver logs
-- executor-side execution writes to executor logs
-- Databricks is responsible for capturing those logs from the cluster runtime
+- startup summary:
+  [JavaCrdpService.java](/E:/codex/work/thales.databricks.integration/src/main/java/com/thales/databricks/integration/service/JavaCrdpService.java:478)
+- reveal fail-open logging:
+  [JavaCrdpService.java](/E:/codex/work/thales.databricks.integration/src/main/java/com/thales/databricks/integration/service/JavaCrdpService.java:659)
+- payload suffix on failed HTTP or invalid-response paths:
+  [JavaCrdpService.java](/E:/codex/work/thales.databricks.integration/src/main/java/com/thales/databricks/integration/service/JavaCrdpService.java:443)
+  and
+  [JavaCrdpService.java](/E:/codex/work/thales.databricks.integration/src/main/java/com/thales/databricks/integration/service/JavaCrdpService.java:652)
 
-## Logging settings
+### Python helper runtime
 
-These settings are supported in `udfConfig.properties`:
+The Python helper path currently emits:
 
-```properties
-APP_LOG_LEVEL=INFO
-APP_LOG_FORMAT=kv
-APP_LOG_INCLUDE_STACKTRACE=false
-APP_LOG_COMPONENT=thales-databricks-udf
-```
+- reveal fail-open log events through Python `logging`
+- request traces and execution summaries returned as structured results rather
+  than ordinary log lines
+- notebook-visible diagnostics through helper notebooks such as
+  `runtime_diagnostics.py`
 
-### `APP_LOG_LEVEL`
+Example:
 
-Supported values:
+- reveal fail-open logger call:
+  [executor.py](/E:/codex/work/thales.databricks.integration/src/thales_databricks_integration/executor.py:628)
 
-- `ERROR`
-- `WARN`
-- `INFO`
-- `DEBUG`
+## Active Logging-Related Settings
 
-Default:
+### `CRDP_DEBUG_LOG_PAYLOAD`
 
-- `INFO`
+Purpose:
 
-Behavior:
+- controls whether certain Java failure messages append the outbound request
+  payload
 
-- `ERROR` shows only error events
-- `WARN` shows warnings and errors
-- `INFO` shows informational events, warnings, and errors
-- `DEBUG` shows the most detail, including normal request start/success events
+Current behavior:
 
-### `APP_LOG_FORMAT`
-
-Supported values:
-
-- `kv`
-- `json`
-
-Default:
-
-- `kv`
-
-Behavior:
-
-- `kv` produces one-line key/value logs
-- `json` produces one-line JSON logs
-
-### `APP_LOG_INCLUDE_STACKTRACE`
-
-Supported values:
-
+- `false`
+  request payload is not appended
 - `true`
-- `false`
+  request payload may be appended to some failure messages
 
-Default:
+Code path:
 
-- `false`
+- property read:
+  [IntegrationConfig.java](/E:/codex/work/thales.databricks.integration/src/main/java/com/thales/databricks/integration/config/IntegrationConfig.java:197)
+- payload suffix behavior:
+  [JavaCrdpService.java](/E:/codex/work/thales.databricks.integration/src/main/java/com/thales/databricks/integration/service/JavaCrdpService.java:652)
 
-Behavior:
+Important warning:
 
-- when `true`, stack traces are printed after the log line for warning/error events with exceptions
-- when `false`, the log line still includes exception class and message summary, but not the full stack trace
+- when enabled, this may expose request content in logs
+- use only for tightly controlled troubleshooting
+- do not leave enabled for routine production runs
 
-### `APP_LOG_COMPONENT`
+### `REVEAL_FAIL_OPEN_TO_CIPHERTEXT`
 
-Default:
+Purpose:
 
-- `thales-databricks-udf`
+- allows reveal operations to return ciphertext instead of failing hard when a
+  reveal exception occurs
 
-Behavior:
+Code path:
 
-- sets a stable component identifier in each log line
-- useful for log filtering and external routing rules
+- property read:
+  [IntegrationConfig.java](/E:/codex/work/thales.databricks.integration/src/main/java/com/thales/databricks/integration/config/IntegrationConfig.java:228)
+- Java fail-open handling:
+  [JavaCrdpService.java](/E:/codex/work/thales.databricks.integration/src/main/java/com/thales/databricks/integration/service/JavaCrdpService.java:168)
+- Python fail-open handling:
+  [executor.py](/E:/codex/work/thales.databricks.integration/src/thales_databricks_integration/executor.py:589)
 
-## How log levels work
+### `REVEAL_FAIL_OPEN_LOG_LEVEL`
 
-The logger uses a minimum-level model.
+Purpose:
 
-If `APP_LOG_LEVEL=INFO`, then:
+- controls the severity label used when fail-open events are logged
 
-- `INFO` logs are shown
-- `WARN` logs are shown
-- `ERROR` logs are shown
-- `DEBUG` logs are hidden
+Code path:
 
-If `APP_LOG_LEVEL=DEBUG`, then everything is shown.
+- property read:
+  [IntegrationConfig.java](/E:/codex/work/thales.databricks.integration/src/main/java/com/thales/databricks/integration/config/IntegrationConfig.java:231)
+- Java fail-open log output:
+  [JavaCrdpService.java](/E:/codex/work/thales.databricks.integration/src/main/java/com/thales/databricks/integration/service/JavaCrdpService.java:665)
+- Python fail-open log output:
+  [executor.py](/E:/codex/work/thales.databricks.integration/src/thales_databricks_integration/executor.py:624)
 
-If `APP_LOG_LEVEL=ERROR`, then only errors are shown.
+### `CONFIG_VERSION`, `CONFIG_RELEASE_DATE`, `CONFIG_CHANGE_REF`
 
-## Log format examples
+Purpose:
 
-### Key/value format
+- add environment/version fingerprints that appear in diagnostics and fail-open
+  logs
 
-Example:
+These are useful for operational traceability and release correlation.
 
-```text
-[THALES-UDF] level=INFO component=thales-databricks-udf logger=ThalesDataBricksCRDPBulkService event=crdp_http_request_success endpoint=v1/protectbulk rows=5469 status_code=200 elapsed_ms=187
-```
 
-### JSON format
+## Where Logs Go
 
-Example:
+Current behavior is straightforward:
 
-```json
-{"level":"INFO","component":"thales-databricks-udf","logger":"ThalesDataBricksCRDPBulkService","event":"crdp_http_request_success","endpoint":"v1/protectbulk","rows":"5469","status_code":"200","elapsed_ms":"187","ts":"2026-05-21T15:01:00Z"}
-```
+- Java startup and informational console output goes to `stdout`
+- Java fail-open messages go to `stderr`
+- thrown exceptions surface through Databricks notebook errors, driver logs,
+  or executor logs depending on where execution occurred
+- Python logger output follows normal Databricks Python logging capture
 
-## Common events
+In practice:
 
-The CRDP bulk service already emits structured events such as:
+- driver-side actions usually appear in driver logs
+- executor-side Java UDF activity appears in executor logs
+- Python helper work may surface in notebook output, driver logs, or executor
+  logs depending on execution shape
 
-- `crdp_http_request_start`
-- `crdp_http_request_success`
-- `crdp_http_request_failed`
-- `crdp_http_request_timeout`
-- `crdp_http_request_io_error`
-- `crdp_authorize_request_failed`
+## What Is Safe To Log
 
-These events are designed to focus on operational context such as:
-
-- endpoint
-- grouped row count or request row count
-- HTTP status code
-- elapsed milliseconds
-- exception class
-- message summary
-
-## What is safe to log
-
-Good logging fields include:
+Generally safe operational fields include:
 
 - event name
-- mode such as `protect`, `reveal`, `protectbulk`, `revealbulk`
-- endpoint such as `v1/protectbulk`
 - object name
 - logical column name
-- resolved policy type
+- policy type
+- API version
+- transport mode
 - batch size
-- row count
-- elapsed milliseconds
-- coarse outcome such as success, fallback, skipped, timeout, or failed
+- grouped request sizes
+- config version metadata
+- coarse success or failure outcome
+- exception class and summary
 
-## What must not be logged
+## What Must Be Treated Carefully
 
-Do not log:
+Do not casually log:
 
 - plaintext values
 - protected tokens
 - external header values
-- passwords
-- API credentials
-- full HTTP payloads
-- full response payloads
+- credentials
+- full request payloads
+- full CRDP response payloads
 
-For this project, the log lines should stay focused on metadata and timing, not
-customer data.
+Important nuance for the current code:
 
-## Where to look in Databricks
+- full or partial response bodies can appear in thrown exception text on some
+  error paths
+- request payloads can be appended when `CRDP_DEBUG_LOG_PAYLOAD=true`
 
-For Databricks compute-cluster runs, start by checking:
+The current runtime should therefore be treated as:
 
-- driver logs for notebook-scoped or driver-side issues
-- executor logs for distributed UDF execution behavior
-- stdout for `INFO`, `WARN`, and `DEBUG`
-- stderr for `ERROR`
+- operationally useful for troubleshooting
+- requiring care when enabling deeper debug behavior
 
-In practice, the most useful places are usually:
+## Databricks Troubleshooting Guidance
 
-- cluster driver logs when debugging setup/config issues
-- executor logs when debugging per-task UDF execution
-- exported or centralized cluster logs when doing operational monitoring
+For compute-cluster troubleshooting, check:
 
-## Suggested operating levels
+- driver logs for config-path, startup, and notebook-orchestration issues
+- executor logs for distributed Java UDF failures
+- notebook stack traces for surfaced exceptions
+- runtime diagnostics notebook output when verifying loaded configuration
 
-### Normal production or large-volume testing
+Good starting points:
 
-Use:
+- [compute_cluster_java_udf_smoke_test_bulk_reveal.py](/E:/codex/work/thales.databricks.integration/notebooks/smoke_tests/compute_cluster_java_udf_smoke_test_bulk_reveal.py:1)
+- [compute_cluster_python_helper_smoke_test.py](/E:/codex/work/thales.databricks.integration/notebooks/smoke_tests/compute_cluster_python_helper_smoke_test.py:1)
+- [runtime_diagnostics.py](/E:/codex/work/thales.databricks.integration/notebooks/utils/runtime_diagnostics.py:1)
 
-```properties
-APP_LOG_LEVEL=INFO
-APP_LOG_FORMAT=kv
-APP_LOG_INCLUDE_STACKTRACE=false
-```
+## Recommended Operational Practice
 
-Why:
-
-- keeps log volume reasonable
-- preserves error and timing visibility
-- avoids flooding logs with routine request-start and request-success noise
-
-### Active troubleshooting
+### Normal runs
 
 Use:
 
 ```properties
-APP_LOG_LEVEL=DEBUG
-APP_LOG_FORMAT=kv
-APP_LOG_INCLUDE_STACKTRACE=true
+CRDP_DEBUG_LOG_PAYLOAD=false
+REVEAL_FAIL_OPEN_TO_CIPHERTEXT=false
 ```
 
 Why:
 
-- exposes detailed request flow
-- helps correlate grouped-call behavior with executor activity
-- surfaces stack traces for troubleshooting
+- minimizes exposure of sensitive request details
+- keeps failures explicit
+- avoids troubleshooting-only verbosity
 
-After troubleshooting, reduce the verbosity again.
+### Controlled troubleshooting
 
-### Structured external parsing
-
-Use:
+Use temporarily:
 
 ```properties
-APP_LOG_LEVEL=INFO
-APP_LOG_FORMAT=json
-APP_LOG_INCLUDE_STACKTRACE=false
+CRDP_DEBUG_LOG_PAYLOAD=true
 ```
 
 Why:
 
-- JSON is often easier for downstream parsing rules
-- useful when an external platform expects structured logs
+- helps inspect the exact request payload for hard-to-diagnose CRDP failures
 
-## Splunk and external log routing
+But:
 
-The recommended model is:
+- use only in a controlled environment
+- remove it immediately after troubleshooting
+- assume the payload may contain sensitive material
 
-1. emit clean stdout/stderr logs from the UDF runtime
+### Fail-open troubleshooting or rollout validation
+
+Use when intentionally testing fail-open behavior:
+
+```properties
+REVEAL_FAIL_OPEN_TO_CIPHERTEXT=true
+REVEAL_FAIL_OPEN_LOG_LEVEL=ERROR
+```
+
+Why:
+
+- lets you validate that reveal requests degrade to ciphertext instead of
+  hard-failing
+- preserves a clear operational signal in logs
+
+## Splunk And External Routing
+
+The preferred model is:
+
+1. let the runtime emit console or Python logging output
 2. let Databricks capture driver and executor logs
-3. forward those logs to Splunk using the customer’s normal Databricks log collection path
+3. forward those logs through the customer's normal Databricks log-export path
 
-This is preferred over embedding a direct Splunk client in the shaded jar.
+This keeps logging responsibility aligned with the Databricks platform model.
 
-Benefits:
+## Bottom Line
 
-- fewer dependency collisions
-- less code in the UDF runtime
-- simpler rollback
-- clearer separation between application logging and platform log shipping
+The current project provides operational logging that is useful for support,
+troubleshooting, and runtime verification.
 
-## What customers should configure for Splunk
+The most important active controls today are:
 
-At a minimum, customers should decide:
-
-- whether they want `kv` or `json` log format
-- which clusters/jobs should emit `DEBUG` vs `INFO`
-- how Databricks driver and executor logs are exported from their environment
-- which log filters in Splunk should match:
-  - `component=thales-databricks-udf`
-  - `logger=<class name>`
-  - event names such as `crdp_http_request_failed`
-
-Recommended starting point:
-
-- `APP_LOG_FORMAT=kv` if the log pipeline is simple and grep-like
-- `APP_LOG_FORMAT=json` if Splunk parsing is built around structured JSON
-
-## Practical troubleshooting workflow
-
-1. set `APP_LOG_LEVEL=INFO`
-2. confirm the cluster picks up the desired `udfConfig.properties`
-3. run the notebook or job
-4. inspect driver and executor logs for:
-   - request failures
-   - timeouts
-   - authorization errors
-   - unexpected request sizes
-5. if needed, temporarily raise to `DEBUG`
-6. if needed, enable `APP_LOG_INCLUDE_STACKTRACE=true`
-7. reduce verbosity after the issue is understood
-
-## Related files
-
-- logger implementation:
-  [ThalesLogger.java](E:\eclipse-workspace\thales.databricks.udf\src\main\java\ThalesLogger.java)
-- logging config reader:
-  [ThalesDataBricksUdfConfig.java](E:\eclipse-workspace\thales.databricks.udf\src\main\java\ThalesDataBricksUdfConfig.java)
-- default config example:
-  [udfConfig.properties](E:\eclipse-workspace\thales.databricks.udf\src\main\resources\udfConfig.properties)
+- `CRDP_DEBUG_LOG_PAYLOAD`
+- `REVEAL_FAIL_OPEN_TO_CIPHERTEXT`
+- `REVEAL_FAIL_OPEN_LOG_LEVEL`
+- config version metadata fields used for diagnostics and traceability
