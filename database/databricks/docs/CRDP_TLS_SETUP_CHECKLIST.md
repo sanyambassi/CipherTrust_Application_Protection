@@ -5,11 +5,13 @@ including the difference between the CRDP server certificate, the Databricks
 client certificate, the CA files, and the PKCS12 file used by the Java UDF
 path.
 
-For the runtime-specific deployment split, see
-[DATABRICKS_TLS_RUNTIME_GUIDE.md](E:\eclipse-workspace\thales.databricks.udf\docs\DATABRICKS_TLS_RUNTIME_GUIDE.md).
-This checklist explains certificate roles; the runtime guide explains which TLS
-loading model belongs to Java compute clusters, Python compute clusters, and
-SQL Warehouse.
+For the current project deployment context, also see:
+- [THALES_PROPERTY_FILE_ACCESS_OPTIONS.md](/E:/codex/work/thales.databricks.integration/docs/THALES_PROPERTY_FILE_ACCESS_OPTIONS.md:1)
+- [DEPLOYMENT.md](/E:/codex/work/thales.databricks.integration/docs/DEPLOYMENT.md:1)
+
+This checklist explains certificate roles and TLS file preparation. The related
+deployment guides explain how those files are surfaced into Java compute
+clusters, Python compute clusters, and SQL Warehouse paths.
 
 ## 1. Understand the certificate roles
 
@@ -335,9 +337,32 @@ CRDP_SSL_VERIFY_SERVER=false
 This disables server certificate and hostname verification in the Java client
 and should be used only for non-production testing.
 
+## 12a. Current validation helpers in this project
+
+Useful current validation artifacts include:
+
+### Compute cluster
+
+- [compute_cluster_python_helper_smoke_test.py](/E:/codex/work/thales.databricks.integration/notebooks/smoke_tests/compute_cluster_python_helper_smoke_test.py:1)
+- [compute_cluster_java_udf_smoke_test_bulk_reveal.py](/E:/codex/work/thales.databricks.integration/notebooks/smoke_tests/compute_cluster_java_udf_smoke_test_bulk_reveal.py:1)
+- [tools/crdp_health_check_tls.py](/E:/codex/work/thales.databricks.integration/tools/crdp_health_check_tls.py:1)
+- [tools/crdp_health_check_non_tls.py](/E:/codex/work/thales.databricks.integration/tools/crdp_health_check_non_tls.py:1)
+
+### SQL Warehouse
+
+- [sample_tls_smoke_test_sql_warehouse.py](/E:/codex/work/thales.databricks.integration/sql_warehouse/smoketest/sample_tls_smoke_test_sql_warehouse.py:1)
+- [sample_tls_debug_uc_function.sql](/E:/codex/work/thales.databricks.integration/sql_warehouse/smoketest/sample_tls_debug_uc_function.sql:1)
+
+Recommended order:
+
+1. validate the files exist and are readable
+2. validate driver-side HTTPS connectivity first
+3. validate Java or Python compute-cluster execution
+4. validate SQL Warehouse only after the PEM-based wheel path is known good
+
 ## 13. Performance note
 
-The Java Databricks CRDP client uses a shared pooled `OkHttpClient`.
+The Java Databricks CRDP client uses a shared `java.net.http.HttpClient`.
 
 That means:
 - HTTPS connections can be reused with keep-alive
@@ -346,12 +371,13 @@ That means:
 
 This is especially important for bulk API throughput.
 
-The Python Databricks wheel now uses a shared pooled `requests.Session()`.
+The Python Databricks wheel uses a shared pooled `requests.Session()`.
 
 That means:
 - HTTPS connections can be reused with keep-alive
 - the full TLS handshake should not happen on every request
-- the Python path now behaves more like the Java path from a connection-reuse perspective
+- the Python path also benefits from connection reuse rather than rebuilding a
+  fresh TLS session for each request
 
 ## 14. Troubleshooting certificate contents
 

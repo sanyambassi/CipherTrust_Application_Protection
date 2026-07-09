@@ -4,16 +4,16 @@
 -- MAGIC
 -- MAGIC Purpose:
 -- MAGIC - create persistent Unity Catalog Python functions for external-policy protect and reveal operations
--- MAGIC - pass the sibling `*_header` column value to CRDP as the external metadata/header
--- MAGIC - embed the relevant UDF config directly in the function body
+-- MAGIC - preserve sibling `*_header` handling for external policies
+-- MAGIC - embed the relevant config directly in the function body
 -- MAGIC - avoid runtime reads of `/Volumes/.../udfConfig.properties`
 -- MAGIC - create a persistent reveal view for `plaintext_protected_external`
 -- MAGIC
--- MAGIC Prerequisite:
--- MAGIC - this script uses the `ENVIRONMENT` clause for a custom wheel dependency
--- MAGIC - that requires a Unity Catalog Python-UDF-capable SQL Warehouse
--- MAGIC - if Databricks throws a syntax error at `ENVIRONMENT`, the warehouse is
--- MAGIC   likely not on a supported SQL Warehouse type/runtime for this feature yet
+-- MAGIC Notes:
+-- MAGIC - this script now targets the current `thales_databricks_integration` package
+-- MAGIC - the external path is still scalar/view oriented in SQL Warehouse
+-- MAGIC - there is not yet a current rowset-style external-header reveal helper in `uc.py`,
+-- MAGIC   so this deploy script keeps the external-header logic inline inside the UC Python functions
 
 -- COMMAND ----------
 
@@ -34,11 +34,11 @@ RETURNS STRING
 LANGUAGE PYTHON
 NOT DETERMINISTIC
 ENVIRONMENT (
-  dependencies = '["/Volumes/my_catalog/my_schema/volume_forjars/thales_databricks_udf-0.1.7-py3-none-any.whl"]',
+  dependencies = '["/Volumes/my_catalog/my_schema/volume_forjars/thales_databricks_integration-0.1.0-py3-none-any.whl"]',
   environment_version = 'None'
 )
 AS $$
-from thales_databricks_udf.crdp_udfs import thales_crdp_python_function_bulk_by_object
+from thales_databricks_integration import IntegrationConfig, reveal_rows
 
 PROPERTIES = {
     "CRDPIP": "your-crdp-ip",
@@ -47,56 +47,46 @@ PROPERTIES = {
     "DEFAULTREVEALUSER": "admin",
     "DEFAULTMETADATA": "1001000",
     "DEFAULTMODE": "external",
-    "BADDATATAG": "999999999",
-    "RETURNCIPHERTEXTFORUSERWITHNOKEYACCESS": "yes",
-    "DEFAULTINTERNALCHARPOLICY": "char-internal",
-    "DEFAULTINTERNALNBRNBRPOLICY": "nbr-nbr-internal",
-    "DEFAULTEXTERNALCHARPOLICY": "char-external",
-    "DEFAULTEXTERNALNBRNBRPOLICY": "test-nbr-nbr-external",
+    "BATCH_SIZE": "10000",
+    "CRDP_API_VERSION": "v2",
+    "CRDP_SSL_ENABLED": "false",
+    "CRDP_SSL_VERIFY_SERVER": "false",
+    "CRDP_CONNECT_TIMEOUT_MS": "10000",
+    "CRDP_READ_TIMEOUT_MS": "30000",
+    "SPARK_GROUP_SIZE": "1000",
+    "CRDP_V2_MAX_ITEMS_PER_REQUEST": "1000",
+    "CRDP_V2_MAX_POLICY_GROUPS_PER_REQUEST": "50",
+    "CRDP_V2_ENABLE_MULTI_POLICY": "true",
     "COLUMN_PROFILES": "email|tag.char.external,address|tag.char.external,ssn|tag.nbr.external,creditcard|tag.nbr.external,creditcardcode|tag.nbr.external",
-    "protect.object.my_catalog.my_schema.plaintext_protected_internal": "email|tag.char.internal,address|tag.char.internal,ssn|tag.nbr.internal,creditcard|tag.nbr.internal,creditcardcode|tag.nbr.internal",
     "protect.object.my_catalog.my_schema.plaintext_protected_external": "email|tag.char.external,address|tag.char.external,ssn|tag.nbr.external,creditcard|tag.nbr.external,creditcardcode|tag.nbr.external",
-    "protect.object.my_catalog.my_schema.plaintext_protected_none": "email|tag.char.none,address|tag.char.none,ssn|tag.nbr.none,creditcard|tag.nbr.none,creditcardcode|tag.nbr.none",
-    "protect.object.my_catalog.my_schema.plaintext_protected_internal_arrays": "email|tag.char.internal,address|tag.char.internal,ssn|tag.nbr.internal,creditcard|tag.nbr.internal,creditcardcode|tag.nbr.internal",
-    "protect.object.my_catalog.my_schema.plaintext_protected_external_arrays": "email|tag.char.external,address|tag.char.external,ssn|tag.nbr.external,creditcard|tag.nbr.external,creditcardcode|tag.nbr.external",
-    "protect.object.my_catalog.my_schema.plaintext_protected_none_arrays": "email|tag.char.none,address|tag.char.none,ssn|tag.nbr.none,creditcard|tag.nbr.none,creditcardcode|tag.nbr.none",
-    "protect.object.my_catalog.my_schema.account_balance_numbers_protected_internal": "balance|tag.nbr.internal,amount|tag.nbr.internal,fee|tag.nbr.internal",
-    "protect.object.my_catalog.my_schema.account_balance_numbers_protected_external": "balance|tag.nbr.external,amount|tag.nbr.external,fee|tag.nbr.external",
-    "protect.object.my_catalog.my_schema.account_balance_numbers_protected_none": "balance|tag.nbr.none,amount|tag.nbr.none,fee|tag.nbr.none",
-    "protect.object.my_catalog.my_schema.account_balance_numbers_protected_internal_arrays": "balance|tag.nbr.internal,amount|tag.nbr.internal,fee|tag.nbr.internal",
-    "protect.object.my_catalog.my_schema.account_balance_numbers_protected_external_arrays": "balance|tag.nbr.external,amount|tag.nbr.external,fee|tag.nbr.external",
-    "protect.object.my_catalog.my_schema.account_balance_numbers_protected_none_arrays": "balance|tag.nbr.none,amount|tag.nbr.none,fee|tag.nbr.none",
     "external_table_header_value": "header",
     "external_table_header_delimiter": "_",
     "TAG.char.external": "char-external",
     "TAG.char.external.policyType": "external",
     "TAG.nbr.external": "test-nbr-nbr-external",
-    "TAG.nbr.external.policyType": "external",
-    "TAG.char.internal": "char-internal",
-    "TAG.char.internal.policyType": "internal",
-    "TAG.nbr.internal": "nbr-nbr-internal",
-    "TAG.nbr.internal.policyType": "internal",
-    "TAG.nbr.none": "nbr-none",
-    "TAG.nbr.none.policyType": "none",
-    "TAG.char.none": "char-none",
-    "TAG.char.none.policyType": "none",
+    "TAG.nbr.external.policyType": "external"
 }
 
 if value is None:
     return None
 
-result = thales_crdp_python_function_bulk_by_object(
-    [value],
-    "revealbulk",
-    datatype,
-    object_name,
-    column_name=column_name,
+config = IntegrationConfig.from_dict(PROPERTIES)
+header_column_name = config.resolve_external_header_column_name(column_name)
+row = {column_name: value}
+if header_column_name and external_header is not None:
+    row[header_column_name] = external_header
+
+result = reveal_rows(
+    rows=[row],
+    object_name=object_name,
+    sensitive_columns=[column_name],
+    config=config,
     reveal_user=reveal_user,
-    external_versions=[external_header],
-    properties=PROPERTIES,
 )
 
-return result[0] if result else None
+if not result.rows:
+    return value
+return result.rows[0].get(column_name)
 $$;
 
 -- COMMAND ----------
@@ -111,11 +101,11 @@ RETURNS STRUCT<protected_value: STRING, external_header: STRING>
 LANGUAGE PYTHON
 NOT DETERMINISTIC
 ENVIRONMENT (
-  dependencies = '["/Volumes/my_catalog/my_schema/volume_forjars/thales_databricks_udf-0.1.7-py3-none-any.whl"]',
+  dependencies = '["/Volumes/my_catalog/my_schema/volume_forjars/thales_databricks_integration-0.1.0-py3-none-any.whl"]',
   environment_version = 'None'
 )
 AS $$
-from thales_databricks_udf.crdp_udfs import thales_crdp_python_protect_with_external_header_by_object
+from thales_databricks_integration import IntegrationConfig, protect_rows
 
 PROPERTIES = {
     "CRDPIP": "your-crdp-ip",
@@ -124,51 +114,46 @@ PROPERTIES = {
     "DEFAULTREVEALUSER": "admin",
     "DEFAULTMETADATA": "1001000",
     "DEFAULTMODE": "external",
-    "BADDATATAG": "999999999",
-    "RETURNCIPHERTEXTFORUSERWITHNOKEYACCESS": "yes",
-    "DEFAULTINTERNALCHARPOLICY": "char-internal",
-    "DEFAULTINTERNALNBRNBRPOLICY": "nbr-nbr-internal",
-    "DEFAULTEXTERNALCHARPOLICY": "char-external",
-    "DEFAULTEXTERNALNBRNBRPOLICY": "test-nbr-nbr-external",
+    "BATCH_SIZE": "10000",
+    "CRDP_API_VERSION": "v2",
+    "CRDP_SSL_ENABLED": "false",
+    "CRDP_SSL_VERIFY_SERVER": "false",
+    "CRDP_CONNECT_TIMEOUT_MS": "10000",
+    "CRDP_READ_TIMEOUT_MS": "30000",
+    "SPARK_GROUP_SIZE": "1000",
+    "CRDP_V2_MAX_ITEMS_PER_REQUEST": "1000",
+    "CRDP_V2_MAX_POLICY_GROUPS_PER_REQUEST": "50",
+    "CRDP_V2_ENABLE_MULTI_POLICY": "true",
     "COLUMN_PROFILES": "email|tag.char.external,address|tag.char.external,ssn|tag.nbr.external,creditcard|tag.nbr.external,creditcardcode|tag.nbr.external",
-    "protect.object.my_catalog.my_schema.plaintext_protected_internal": "email|tag.char.internal,address|tag.char.internal,ssn|tag.nbr.internal,creditcard|tag.nbr.internal,creditcardcode|tag.nbr.internal",
     "protect.object.my_catalog.my_schema.plaintext_protected_external": "email|tag.char.external,address|tag.char.external,ssn|tag.nbr.external,creditcard|tag.nbr.external,creditcardcode|tag.nbr.external",
-    "protect.object.my_catalog.my_schema.plaintext_protected_none": "email|tag.char.none,address|tag.char.none,ssn|tag.nbr.none,creditcard|tag.nbr.none,creditcardcode|tag.nbr.none",
-    "protect.object.my_catalog.my_schema.plaintext_protected_internal_arrays": "email|tag.char.internal,address|tag.char.internal,ssn|tag.nbr.internal,creditcard|tag.nbr.internal,creditcardcode|tag.nbr.internal",
-    "protect.object.my_catalog.my_schema.plaintext_protected_external_arrays": "email|tag.char.external,address|tag.char.external,ssn|tag.nbr.external,creditcard|tag.nbr.external,creditcardcode|tag.nbr.external",
-    "protect.object.my_catalog.my_schema.plaintext_protected_none_arrays": "email|tag.char.none,address|tag.char.none,ssn|tag.nbr.none,creditcard|tag.nbr.none,creditcardcode|tag.nbr.none",
-    "protect.object.my_catalog.my_schema.account_balance_numbers_protected_internal": "balance|tag.nbr.internal,amount|tag.nbr.internal,fee|tag.nbr.internal",
-    "protect.object.my_catalog.my_schema.account_balance_numbers_protected_external": "balance|tag.nbr.external,amount|tag.nbr.external,fee|tag.nbr.external",
-    "protect.object.my_catalog.my_schema.account_balance_numbers_protected_none": "balance|tag.nbr.none,amount|tag.nbr.none,fee|tag.nbr.none",
-    "protect.object.my_catalog.my_schema.account_balance_numbers_protected_internal_arrays": "balance|tag.nbr.internal,amount|tag.nbr.internal,fee|tag.nbr.internal",
-    "protect.object.my_catalog.my_schema.account_balance_numbers_protected_external_arrays": "balance|tag.nbr.external,amount|tag.nbr.external,fee|tag.nbr.external",
-    "protect.object.my_catalog.my_schema.account_balance_numbers_protected_none_arrays": "balance|tag.nbr.none,amount|tag.nbr.none,fee|tag.nbr.none",
     "external_table_header_value": "header",
     "external_table_header_delimiter": "_",
     "TAG.char.external": "char-external",
     "TAG.char.external.policyType": "external",
     "TAG.nbr.external": "test-nbr-nbr-external",
-    "TAG.nbr.external.policyType": "external",
-    "TAG.char.internal": "char-internal",
-    "TAG.char.internal.policyType": "internal",
-    "TAG.nbr.internal": "nbr-nbr-internal",
-    "TAG.nbr.internal.policyType": "internal",
-    "TAG.nbr.none": "nbr-none",
-    "TAG.nbr.none.policyType": "none",
-    "TAG.char.none": "char-none",
-    "TAG.char.none.policyType": "none",
+    "TAG.nbr.external.policyType": "external"
 }
 
 if value is None:
     return {"protected_value": None, "external_header": None}
 
-return thales_crdp_python_protect_with_external_header_by_object(
-    value,
-    datatype,
-    object_name,
-    column_name=column_name,
-    properties=PROPERTIES,
+config = IntegrationConfig.from_dict(PROPERTIES)
+header_column_name = config.resolve_external_header_column_name(column_name)
+result = protect_rows(
+    rows=[{column_name: value}],
+    object_name=object_name,
+    sensitive_columns=[column_name],
+    config=config,
 )
+
+if not result.rows:
+    return {"protected_value": value, "external_header": None}
+
+protected_row = result.rows[0]
+return {
+    "protected_value": protected_row.get(column_name),
+    "external_header": protected_row.get(header_column_name) if header_column_name else None,
+}
 $$;
 
 -- COMMAND ----------

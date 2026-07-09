@@ -1,59 +1,69 @@
--- Lakeflow Declarative Pipelines / DLT-style SQL examples for Thales CRDP
+-- Lakeflow Declarative Pipelines / SQL examples for the current integration.
 --
 -- Recommended governed pattern:
--- - use secured views or UC functions
--- - write into streaming tables or materialized views
+-- - stream from protected Delta tables when you are building bronze/silver
+-- - reveal through governed UC functions or governed UC views when you are
+--   building gold / consumer-facing objects
 
--- Example 1: create a streaming table from a tokenized source.
-CREATE OR REFRESH STREAMING TABLE customer_tokens_bronze
+USE CATALOG my_catalog;
+USE SCHEMA my_schema;
+
+-- Example 1: create a streaming table from a protected source table.
+CREATE OR REFRESH STREAMING TABLE plaintext_protected_internal_bronze
 AS
 SELECT
-  customer_id,
-  first_name,
-  last_name,
-  customer_status,
-  created_ts,
-  email_token
-FROM STREAM main.raw.customer_tokens;
+  custid,
+  name,
+  address,
+  city,
+  state,
+  zip,
+  phone,
+  email,
+  dob,
+  creditcard,
+  creditcardcode,
+  ssn
+FROM STREAM my_catalog.my_schema.plaintext_protected_internal;
 
--- Example 2: create a governed materialized view that reveals email using the
--- secure SQL path.
-CREATE OR REFRESH MATERIALIZED VIEW customer_reveal_gold
+
+-- Example 2: create a governed gold materialized view from the optimized
+-- flattened UC reveal view. This is the preferred customer-facing SQL path.
+CREATE OR REFRESH MATERIALIZED VIEW plaintext_internal_reveal_gold
 AS
 SELECT
-  customer_id,
-  first_name,
-  last_name,
-  customer_status,
-  created_ts,
-  main.security.thales_crdp_scalar_by_column_with_user(
-    email_token,
-    'reveal',
-    'char',
-    'email',
-    session_user()
-  ) AS email
-FROM customer_tokens_bronze;
+  custid,
+  name,
+  address,
+  city,
+  state,
+  zip,
+  phone,
+  email,
+  dob,
+  creditcard,
+  creditcardcode,
+  ssn
+FROM my_catalog.my_schema.v_plaintext_final_reveal_flat_uc_embedded_v2_optimized;
 
--- Example 3: array-based pattern.
-CREATE OR REFRESH STREAMING TABLE customer_token_arrays_bronze
+
+-- Example 3: if you want to keep the lower-level array-oriented governed path,
+-- materialize from the optimized array reveal view instead.
+CREATE OR REFRESH MATERIALIZED VIEW plaintext_internal_reveal_array_gold
 AS
 SELECT
-  customer_group_id,
-  snapshot_ts,
-  email_token_array
-FROM STREAM main.raw.customer_token_arrays;
+  row_id,
+  custid_array,
+  name_array,
+  address_array,
+  city_array,
+  state_array,
+  zip_array,
+  phone_array,
+  email_array,
+  dob_array,
+  creditcard_array,
+  creditcardcode_array,
+  ssn_array
+FROM my_catalog.my_schema.v_plaintext_protected_internal_array_reveal_uc_embedded_v2_optimized;
 
-CREATE OR REFRESH MATERIALIZED VIEW customer_array_reveal_gold
-AS
-SELECT
-  customer_group_id,
-  snapshot_ts,
-  main.security.thales_crdp_bulk_by_column_with_user(
-    email_token_array,
-    'revealbulk',
-    'char',
-    'email',
-    session_user()
-  ) AS email_array
-FROM customer_token_arrays_bronze;

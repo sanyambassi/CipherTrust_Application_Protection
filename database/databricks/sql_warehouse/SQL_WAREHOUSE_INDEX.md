@@ -1,94 +1,62 @@
 # SQL Warehouse Index
 
-This guide is the quickest way to choose the right artifact in the
-[sql_warehouse](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse) folder.
+This folder contains the current SQL Warehouse artifacts for the Thales Databricks Integration project.
 
-## Start here
+## What Is Here
 
-If you want the main SQL Warehouse / Unity Catalog deployment path, start with:
+- `deploy`
+  Current supported SQL Warehouse deployment templates.
+- `benchmarks`
+  Benchmark scripts for latency, count, and CTAS-style throughput measurements.
+- `diagnostics`
+  Engineering diagnostics for isolating Python UDF overhead.
+- `smoketest`
+  Focused smoke tests for SQL Warehouse and UC Python UDF scenarios.
+- `utils`
+  Generators for embedded-config SQL and reveal-view SQL.
 
-- [SQL_WAREHOUSE_DEPLOYMENT_GUIDE.md](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\docs\SQL_WAREHOUSE_DEPLOYMENT_GUIDE.md)
+## Recommended Starting Point
 
-If you want the rollout sequence and validation checklist, use:
+For most customer-facing SQL Warehouse rollouts, start with:
 
-- [SQL_WAREHOUSE_ROLLOUT_CHECKLIST.md](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\docs\SQL_WAREHOUSE_ROLLOUT_CHECKLIST.md)
+- [create_uc_plaintext_protected_internal_reveal_functions_and_views_embedded_config.sql](/E:/codex/work/thales.databricks.integration/sql_warehouse/deploy/create_uc_plaintext_protected_internal_reveal_functions_and_views_embedded_config.sql:1)
 
-## Folder layout
+That script is the strongest end-to-end reference template for:
 
-### deploy
+- persistent Unity Catalog Python reveal functions
+- embedded configuration
+- governed reveal views
+- the optimized rowset-based reveal pattern
 
-Primary deployment scripts to run in Databricks SQL / Unity Catalog.
+## Supported Deploy Templates
 
-- [create_uc_plaintext_protected_internal_reveal_functions_and_views_embedded_config.sql](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\deploy\create_uc_plaintext_protected_internal_reveal_functions_and_views_embedded_config.sql)
-- [create_uc_plaintext_protected_internal_reveal_functions_and_views_embedded_config_optimized.sql](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\deploy\create_uc_plaintext_protected_internal_reveal_functions_and_views_embedded_config_optimized.sql)
-- [create_uc_plaintext_protected_internal_reveal_functions_and_views_wheel_includes_properties.sql](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\deploy\create_uc_plaintext_protected_internal_reveal_functions_and_views_wheel_includes_properties.sql)
-- [create_uc_plaintext_protected_external_reveal_functions_and_views_embedded_config.sql](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\deploy\create_uc_plaintext_protected_external_reveal_functions_and_views_embedded_config.sql)
-- [create_uc_plaintext_protected_none_reveal_functions_and_views_embedded_config.sql](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\deploy\create_uc_plaintext_protected_none_reveal_functions_and_views_embedded_config.sql)
+- Internal reveal path:
+  [create_uc_plaintext_protected_internal_reveal_functions_and_views_embedded_config.sql](/E:/codex/work/thales.databricks.integration/sql_warehouse/deploy/create_uc_plaintext_protected_internal_reveal_functions_and_views_embedded_config.sql:1)
+- None-policy reveal path:
+  [create_uc_plaintext_protected_none_reveal_functions_and_views_embedded_config.sql](/E:/codex/work/thales.databricks.integration/sql_warehouse/deploy/create_uc_plaintext_protected_none_reveal_functions_and_views_embedded_config.sql:1)
+- External-policy reveal path:
+  [create_uc_plaintext_protected_external_reveal_functions_and_views_embedded_config.sql](/E:/codex/work/thales.databricks.integration/sql_warehouse/deploy/create_uc_plaintext_protected_external_reveal_functions_and_views_embedded_config.sql:1)
 
-Use these when you want:
+## Benchmarks
 
-- the main persistent UC function and view deployment path
-- internal or external protected-table SQL Warehouse rollout scripts
-- none-table SQL Warehouse rollout scripts
+- Interactive latency and shape comparison:
+  [benchmark_uc_plaintext_protected_internal_reveal_performance.sql](/E:/codex/work/thales.databricks.integration/sql_warehouse/benchmarks/benchmark_uc_plaintext_protected_internal_reveal_performance.sql:1)
+- Full-processing count benchmark:
+  [benchmark_uc_plaintext_protected_internal_reveal_count.sql](/E:/codex/work/thales.databricks.integration/sql_warehouse/benchmarks/benchmark_uc_plaintext_protected_internal_reveal_count.sql:1)
+- CTAS throughput/materialization benchmark:
+  [benchmark_uc_plaintext_protected_internal_reveal_ctas.sql](/E:/codex/work/thales.databricks.integration/sql_warehouse/benchmarks/benchmark_uc_plaintext_protected_internal_reveal_ctas.sql:1)
 
-### samples
+## Diagnostics
 
-Reference examples and supporting SQL/Python patterns.
+- Python UDF overhead isolation:
+  [benchmark_uc_python_udf_overhead_embedded_config.sql](/E:/codex/work/thales.databricks.integration/sql_warehouse/diagnostics/benchmark_uc_python_udf_overhead_embedded_config.sql:1)
 
-- [sample_create_uc_secure_views.sql](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\samples\sample_create_uc_secure_views.sql)
-- [sample_grant_uc_secure_views.sql](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\samples\sample_grant_uc_secure_views.sql)
-- [sample_thales_crdp_python_udf_imports.py](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\samples\sample_thales_crdp_python_udf_imports.py)
-- [sample_tls_smoke_test.py](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\samples\sample_tls_smoke_test.py)
-- [sample_tls_smoke_test_compute_cluster.py](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\samples\sample_tls_smoke_test_compute_cluster.py)
-- [sample_tls_smoke_test_sql_warehouse.py](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\samples\sample_tls_smoke_test_sql_warehouse.py)
-- [sample_tls_debug_uc_function.sql](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\samples\sample_tls_debug_uc_function.sql)
+## Smoke Tests
 
-Use these when you want:
+- [sample_tls_smoke_test_sql_warehouse.py](/E:/codex/work/thales.databricks.integration/sql_warehouse/smoketest/sample_tls_smoke_test_sql_warehouse.py:1)
+- [sample_tls_debug_uc_function.sql](/E:/codex/work/thales.databricks.integration/sql_warehouse/smoketest/sample_tls_debug_uc_function.sql:1)
 
-- sample wrapper view patterns
-- sample grants
-- Python import/reference examples
-- TLS smoke testing for the Python wheel path on compute clusters
-- SQL Warehouse-style/base64 TLS smoke testing for the Python wheel path
-- SQL Warehouse TLS material diagnostics
+## Generators
 
-### utils
-
-Helper and generator artifacts.
-
-- [generate_reveal_views_from_properties.py](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\utils\generate_reveal_views_from_properties.py)
-- [generate_embedded_config_sql_from_properties.py](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\utils\generate_embedded_config_sql_from_properties.py)
-
-Use this when you want:
-
-- help generating reveal-view SQL from properties-driven configuration
-- stamping embedded-config SQL files from `udfConfig.properties`
-- embedding SQL Warehouse TLS cert material as base64 properties
-
-### legacy
-
-Older or manually customized reference artifacts.
-
-- [legacy_create_uc_functions_built_wheel.sql](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\legacy\legacy_create_uc_functions_built_wheel.sql)
-- [legacy_thales_crdp_uc_function_templates.sql](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\legacy\legacy_thales_crdp_uc_function_templates.sql)
-
-Use these only when:
-
-- comparing against older deployment approaches
-- manually adapting templates for a special case
-
-### docs
-
-Detailed guidance and rollout documents.
-
-- [SQL_WAREHOUSE_DEPLOYMENT_GUIDE.md](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\docs\SQL_WAREHOUSE_DEPLOYMENT_GUIDE.md)
-- [SQL_WAREHOUSE_ROLLOUT_CHECKLIST.md](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\docs\SQL_WAREHOUSE_ROLLOUT_CHECKLIST.md)
-- [OPTIMIZED_UDF_MEMORY_GUIDANCE.md](E:\eclipse-workspace\thales.databricks.udf\sql_warehouse\docs\OPTIMIZED_UDF_MEMORY_GUIDANCE.md)
-
-## Quick decision guide
-
-1. Start with the deployment guide.
-2. Choose a script from `deploy/`.
-3. Use `samples/` for wrapper and grant examples.
-4. Use `utils/` for SQL generation helpers.
-5. Use `legacy/` only when you specifically need an older reference path.
+- [generate_embedded_config_sql_from_properties.py](/E:/codex/work/thales.databricks.integration/sql_warehouse/utils/generate_embedded_config_sql_from_properties.py:1)
+- [generate_reveal_views_from_properties.py](/E:/codex/work/thales.databricks.integration/sql_warehouse/utils/generate_reveal_views_from_properties.py:1)

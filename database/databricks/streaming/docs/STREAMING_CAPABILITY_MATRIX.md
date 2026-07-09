@@ -20,8 +20,8 @@ Setup:
 from pyspark.sql import types as T
 
 spark.udf.registerJavaFunction(
-    "thales_protect_by_column",
-    "ThalesCrdpProtectByColumnUdf",
+    "thales_protect_by_object_and_column",
+    "com.thales.databricks.integration.udf.ThalesProtectByObjectAndColumnUdf",
     T.StringType(),
 )
 ```
@@ -37,7 +37,8 @@ protected_customer_stream = customer_stream.selectExpr(
     "last_name",
     "customer_status",
     "created_ts",
-    "thales_protect_by_column(email, 'char', 'email') as email_token",
+    "thales_protect_by_object_and_column(email, 'char', "
+    "'my_catalog.my_schema.plaintext_protected_internal', 'email') as email_token",
 )
 ```
 
@@ -70,11 +71,11 @@ SELECT
   last_name,
   customer_status,
   created_ts,
-  main.security.thales_crdp_scalar_by_column_with_user(
+  my_catalog.my_schema.thales_uc_reveal_by_object_and_column(
     email_token,
-    'reveal',
-    'char',
+    'my_catalog.my_schema.plaintext_protected_internal',
     'email',
+    '/Volumes/my_catalog/my_schema/volume_forjars/config/udfConfig.properties',
     session_user()
   ) AS email
 FROM main.raw.customer_tokens;
@@ -144,8 +145,8 @@ SELECT * FROM plaintext_protected_internal_reveal_gold;
 
 Note:
 
-- this is the easiest Lakeflow test path if you already deployed the SQL Warehouse
-  embedded-config reveal views
+- this is the easiest Lakeflow test path if you already deployed the governed
+  Unity Catalog reveal views
 - it keeps reveal logic behind governed UC views
 
 ## 4. Lakeflow / Declarative Pipelines reading optimized secured views
@@ -167,7 +168,7 @@ SELECT
   creditcard,
   creditcardcode,
   ssn
-FROM my_catalog.my_schema.v_plaintext_final_reveal_flat_uc_embedded_optimized;
+FROM my_catalog.my_schema.v_plaintext_final_reveal_flat_uc_embedded_v2_optimized;
 ```
 
 Transform:
@@ -176,7 +177,7 @@ Transform:
 CREATE OR REFRESH MATERIALIZED VIEW plaintext_protected_internal_reveal_flat_gold
 AS
 SELECT *
-FROM my_catalog.my_schema.v_plaintext_final_reveal_flat_uc_embedded_optimized;
+FROM my_catalog.my_schema.v_plaintext_final_reveal_flat_uc_embedded_v2_optimized;
 ```
 
 Usage:
@@ -207,3 +208,13 @@ Why this is the easiest path:
 - it avoids trying to make cluster-scoped Java UDF registrations durable inside
   Lakeflow
 - it gives you a governed boundary first, then a pipeline test on top of that
+
+
+## Current repo examples
+
+- `streaming/structured_streaming_java_udf_examples.py`
+- `streaming/structured_streaming_python_helper_foreachbatch.py`
+- `streaming/lakeflow_sql_examples.sql`
+- `streaming/lakeflow_python_examples.py`
+- `streaming/plaintext_protected_internal_lakeflow_examples.sql`
+- `streaming/plaintext_protected_internal_lakeflow_python_examples.py`

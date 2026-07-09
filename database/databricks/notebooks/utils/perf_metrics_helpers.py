@@ -4,14 +4,13 @@
 # MAGIC
 # MAGIC Helper functions for recording notebook-level performance runs to a Delta
 # MAGIC table and, optionally, to CSV. These helpers are intentionally lightweight
-# MAGIC so they can be reused by the load-test and benchmark notebooks.
+# MAGIC so they can be reused by the helper-based benchmark notebooks.
 
 # COMMAND ----------
 
 import json
 from datetime import datetime, timezone
 
-from pyspark.sql import functions as F
 from pyspark.sql import Row
 from pyspark.sql import types as T
 
@@ -30,6 +29,23 @@ COMPACT_SUMMARY_VIEW = globals().get(
 )
 
 
+def _existing_metrics_columns(table_name=None):
+    table_name = table_name or METRICS_TABLE
+    try:
+        return {field.name for field in spark.table(table_name).schema.fields}
+    except Exception:
+        return set()
+
+
+def _select_or_null(column_name, existing_columns, cast_type=None):
+    if column_name in existing_columns:
+        return column_name
+    null_expr = "NULL"
+    if cast_type:
+        null_expr = f"CAST(NULL AS {cast_type})"
+    return f"{null_expr} AS {column_name}"
+
+
 def _safe_conf(name, default=None):
     try:
         return spark.conf.get(name, default)
@@ -39,7 +55,6 @@ def _safe_conf(name, default=None):
 
 def collect_cluster_context():
     try:
-        # Executor memory status includes the driver, so subtract one when possible.
         executor_status = spark.sparkContext._jsc.sc().getExecutorMemoryStatus()
         executor_count = max(int(executor_status.size()) - 1, 0)
     except Exception:
@@ -55,32 +70,6 @@ def collect_cluster_context():
         "default_parallelism": spark.sparkContext.defaultParallelism,
         "executor_count_estimate": executor_count,
     }
-
-
-def load_config_batch_size_from_properties(config_path=None):
-    config_path = config_path or _safe_conf("spark.driverEnv.UDF_CONFIG_VOLUME_PATH", None)
-    if not config_path:
-        return None
-
-    try:
-        from pathlib import Path
-
-        path = Path(config_path)
-        if not path.exists():
-            return None
-
-        for raw_line in path.read_text(encoding="utf-8").splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            if key.strip() == "BATCH_SIZE":
-                batch_size = int(value.strip())
-                return batch_size if batch_size > 0 else None
-    except Exception as exc:
-        print(f"Could not read BATCH_SIZE from udfConfig.properties. Reason: {exc}")
-
-    return None
 
 
 def get_node_timeline_summary(cluster_id, start_ts, end_ts):
@@ -161,6 +150,12 @@ def append_perf_metrics(run_name, step_name, row_count, duration_seconds, extra_
         "source_table": extra_metrics.get("source_table"),
         "target_table": extra_metrics.get("target_table"),
         "cluster_vm_hint": extra_metrics.get("cluster_vm_hint", "Standard_D4ds_v5"),
+        "crdp_api_version": extra_metrics.get("crdp_api_version"),
+        "transport_mode": extra_metrics.get("transport_mode"),
+        "spark_group_size": extra_metrics.get("spark_group_size"),
+        "v2_max_items_per_request": extra_metrics.get("v2_max_items_per_request"),
+        "v2_max_policy_groups_per_request": extra_metrics.get("v2_max_policy_groups_per_request"),
+        "v2_enable_multi_policy": extra_metrics.get("v2_enable_multi_policy"),
         **cluster_context,
         **node_summary,
         "hardware_metrics_available": any(
@@ -194,6 +189,12 @@ def append_perf_metrics(run_name, step_name, row_count, duration_seconds, extra_
         T.StructField("source_table", T.StringType(), True),
         T.StructField("target_table", T.StringType(), True),
         T.StructField("cluster_vm_hint", T.StringType(), True),
+        T.StructField("crdp_api_version", T.StringType(), True),
+        T.StructField("transport_mode", T.StringType(), True),
+        T.StructField("spark_group_size", T.IntegerType(), True),
+        T.StructField("v2_max_items_per_request", T.IntegerType(), True),
+        T.StructField("v2_max_policy_groups_per_request", T.IntegerType(), True),
+        T.StructField("v2_enable_multi_policy", T.BooleanType(), True),
         T.StructField("cluster_id", T.StringType(), True),
         T.StructField("cluster_name", T.StringType(), True),
         T.StructField("node_type", T.StringType(), True),
@@ -234,6 +235,7 @@ def append_perf_metrics(run_name, step_name, row_count, duration_seconds, extra_
 
 def create_perf_summary_view(summary_view_name=None):
     summary_view_name = summary_view_name or f"{METRICS_SCHEMA}.v_thales_perf_test_summary"
+    existing_columns = _existing_metrics_columns(METRICS_TABLE)
 
     spark.sql(
         f"""
@@ -246,31 +248,37 @@ def create_perf_summary_view(summary_view_name=None):
             row_count,
             duration_seconds,
             rows_per_second,
-            target_partitions,
-            generate_partitions,
-            raw_file_partitions,
-            load_pattern,
-            config_batch_size,
-            group_size,
-            group_size_multiplier,
-            benchmark_mode,
-            source_table,
-            target_table,
-            cluster_vm_hint,
-            cluster_id,
-            cluster_name,
-            node_type,
-            driver_node_type,
-            worker_count,
-            spark_version,
-            default_parallelism,
-            executor_count_estimate,
-            avg_cpu_user_pct,
-            avg_cpu_system_pct,
-            avg_cpu_wait_pct,
-            avg_mem_used_pct,
-            avg_mem_swap_pct,
-            hardware_metrics_available,
+            {_select_or_null("target_partitions", existing_columns, "INT")},
+            {_select_or_null("generate_partitions", existing_columns, "INT")},
+            {_select_or_null("raw_file_partitions", existing_columns, "INT")},
+            {_select_or_null("load_pattern", existing_columns, "STRING")},
+            {_select_or_null("config_batch_size", existing_columns, "INT")},
+            {_select_or_null("group_size", existing_columns, "INT")},
+            {_select_or_null("group_size_multiplier", existing_columns, "DOUBLE")},
+            {_select_or_null("benchmark_mode", existing_columns, "BOOLEAN")},
+            {_select_or_null("source_table", existing_columns, "STRING")},
+            {_select_or_null("target_table", existing_columns, "STRING")},
+            {_select_or_null("cluster_vm_hint", existing_columns, "STRING")},
+            {_select_or_null("crdp_api_version", existing_columns, "STRING")},
+            {_select_or_null("transport_mode", existing_columns, "STRING")},
+            {_select_or_null("spark_group_size", existing_columns, "INT")},
+            {_select_or_null("v2_max_items_per_request", existing_columns, "INT")},
+            {_select_or_null("v2_max_policy_groups_per_request", existing_columns, "INT")},
+            {_select_or_null("v2_enable_multi_policy", existing_columns, "BOOLEAN")},
+            {_select_or_null("cluster_id", existing_columns, "STRING")},
+            {_select_or_null("cluster_name", existing_columns, "STRING")},
+            {_select_or_null("node_type", existing_columns, "STRING")},
+            {_select_or_null("driver_node_type", existing_columns, "STRING")},
+            {_select_or_null("worker_count", existing_columns, "STRING")},
+            {_select_or_null("spark_version", existing_columns, "STRING")},
+            {_select_or_null("default_parallelism", existing_columns, "INT")},
+            {_select_or_null("executor_count_estimate", existing_columns, "INT")},
+            {_select_or_null("avg_cpu_user_pct", existing_columns, "DOUBLE")},
+            {_select_or_null("avg_cpu_system_pct", existing_columns, "DOUBLE")},
+            {_select_or_null("avg_cpu_wait_pct", existing_columns, "DOUBLE")},
+            {_select_or_null("avg_mem_used_pct", existing_columns, "DOUBLE")},
+            {_select_or_null("avg_mem_swap_pct", existing_columns, "DOUBLE")},
+            {_select_or_null("hardware_metrics_available", existing_columns, "BOOLEAN")},
             notes_json,
             ROW_NUMBER() OVER (
               PARTITION BY run_name, step_name, row_count, target_table, source_table
@@ -298,6 +306,12 @@ def create_perf_summary_view(summary_view_name=None):
           source_table,
           target_table,
           cluster_vm_hint,
+          crdp_api_version,
+          transport_mode,
+          spark_group_size,
+          v2_max_items_per_request,
+          v2_max_policy_groups_per_request,
+          v2_enable_multi_policy,
           cluster_id,
           cluster_name,
           node_type,
@@ -325,6 +339,7 @@ def create_perf_summary_view(summary_view_name=None):
 def create_perf_compact_view(compact_view_name=None, summary_view_name=None):
     compact_view_name = compact_view_name or COMPACT_SUMMARY_VIEW
     summary_view_name = summary_view_name or f"{METRICS_CATALOG}.{METRICS_SCHEMA}.v_thales_perf_test_summary"
+    existing_summary_columns = _existing_metrics_columns(summary_view_name)
 
     spark.sql(
         f"""
@@ -350,6 +365,12 @@ def create_perf_compact_view(compact_view_name=None, summary_view_name=None):
           group_size,
           group_size_multiplier,
           benchmark_mode,
+          {_select_or_null("crdp_api_version", existing_summary_columns, "STRING")},
+          {_select_or_null("transport_mode", existing_summary_columns, "STRING")},
+          {_select_or_null("spark_group_size", existing_summary_columns, "INT")},
+          {_select_or_null("v2_max_items_per_request", existing_summary_columns, "INT")},
+          {_select_or_null("v2_max_policy_groups_per_request", existing_summary_columns, "INT")},
+          {_select_or_null("v2_enable_multi_policy", existing_summary_columns, "BOOLEAN")},
           hardware_metrics_available
         FROM {summary_view_name}
         """
@@ -359,53 +380,39 @@ def create_perf_compact_view(compact_view_name=None, summary_view_name=None):
     return compact_view_name
 
 
-def build_perf_comparison_query(summary_view_name, run_name_filter=None):
-    run_predicate = (
-        f"WHERE run_name = '{run_name_filter}'"
-        if run_name_filter
-        else ""
+def build_compact_metrics_query(compact_view_name, run_name, extra_columns=None):
+    extra_columns = extra_columns or []
+    available_columns = _existing_metrics_columns(compact_view_name)
+
+    base_columns = [
+        "metric_ts_utc",
+        "run_name",
+        "load_pattern",
+        "step_name",
+        "row_count",
+        "duration_seconds",
+        "rows_per_second",
+        "target_partitions",
+        "generate_partitions",
+        "config_batch_size",
+        "group_size",
+        "benchmark_mode",
+        "worker_count",
+        "executor_count_estimate",
+    ]
+    selected_columns = [column_name for column_name in base_columns if column_name in available_columns]
+    selected_columns.extend(
+        column_name
+        for column_name in extra_columns
+        if column_name in available_columns and column_name not in selected_columns
     )
 
+    projection = ",\n          ".join(selected_columns)
+
     return f"""
-    SELECT
-      run_name,
-      step_name,
-      row_count,
-      cluster_vm_hint,
-      node_type,
-      worker_count,
-      executor_count_estimate,
-      target_partitions,
-      generate_partitions,
-      raw_file_partitions,
-      load_pattern,
-      config_batch_size,
-      group_size,
-      group_size_multiplier,
-      benchmark_mode,
-      ROUND(AVG(duration_seconds), 2) AS avg_duration_seconds,
-      ROUND(AVG(rows_per_second), 2) AS avg_rows_per_second,
-      ROUND(AVG(avg_cpu_user_pct), 2) AS avg_cpu_user_pct,
-      ROUND(AVG(avg_mem_used_pct), 2) AS avg_mem_used_pct,
-      MAX(CASE WHEN hardware_metrics_available THEN 1 ELSE 0 END) AS hardware_metrics_available,
-      COUNT(*) AS sample_count
-    FROM {summary_view_name}
-    {run_predicate}
-    GROUP BY
-      run_name,
-      step_name,
-      row_count,
-      cluster_vm_hint,
-      node_type,
-      worker_count,
-      executor_count_estimate,
-      target_partitions,
-      generate_partitions,
-      raw_file_partitions,
-      load_pattern,
-      config_batch_size,
-      group_size,
-      group_size_multiplier,
-      benchmark_mode
-    ORDER BY row_count DESC, run_name, step_name
-    """
+        SELECT
+          {projection}
+        FROM {compact_view_name}
+        WHERE run_name = '{run_name}'
+        ORDER BY metric_ts_utc DESC, step_name
+        """

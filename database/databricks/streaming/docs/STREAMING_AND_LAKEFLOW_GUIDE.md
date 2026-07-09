@@ -44,9 +44,10 @@ Flow:
 3. Apply the Java protect/reveal UDFs.
 4. Write the result to a Delta target table.
 
-Example file:
+Example files:
 
-- `streaming/structured_streaming_examples.py`
+- `streaming/structured_streaming_java_udf_examples.py`
+- `streaming/structured_streaming_python_helper_foreachbatch.py`
 
 Important note:
 
@@ -70,9 +71,11 @@ Flow:
 2. Use `spark.readStream.table(...)` to stream from that view.
 3. Write to a downstream Delta target.
 
-Example file:
+Example approach:
 
-- `streaming/structured_streaming_uc_view_example.sql`
+- stream from a governed Unity Catalog view such as
+  `my_catalog.my_schema.v_plaintext_final_reveal_flat_uc_embedded_v2_optimized`
+  with `spark.readStream.table(...)`
 
 Important Databricks limitation:
 
@@ -163,10 +166,12 @@ pipelines.
 
 ## Related files
 
-- `streaming/structured_streaming_examples.py`
-- `streaming/structured_streaming_uc_view_example.sql`
+- `streaming/structured_streaming_java_udf_examples.py`
+- `streaming/structured_streaming_python_helper_foreachbatch.py`
 - `streaming/lakeflow_sql_examples.sql`
+- `streaming/lakeflow_python_examples.py`
 - `streaming/plaintext_protected_internal_lakeflow_examples.sql`
-- `COMPUTE_CLUSTER_DEPLOYMENT_GUIDE.md`
-- `sql_warehouse/docs/SQL_WAREHOUSE_DEPLOYMENT_GUIDE.md`
+- `streaming/plaintext_protected_internal_lakeflow_python_examples.py`
+- `streaming/STREAMING_INDEX.md`
+- `docs/DEPLOYMENT.md`
 

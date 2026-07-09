@@ -43,7 +43,7 @@ If you are unsure which compute-cluster notebook to run after deployment, see:
 - `notebooks/compute_cluster_udf_smoke_test.py`
 - `notebooks/numbers/numbers_reveal_castback_examples.py`
 - `notebooks/numbers/numbers_reveal_castback_examples.sql`
-- `notebooks/utils/grant_examples.sql`
+- `notebooks/utils/sql/grant_examples.sql`
 - `cluster_init_scripts/copy_udf_config_init.sh`
 
 ## Deployment overview
@@ -151,10 +151,8 @@ Use:
 That notebook registers:
 
 - scalar protect/reveal UDFs
-- column-aware UDFs
 - reveal-with-user UDFs
-- generic bulk UDFs
-- hardcoded convenience bulk UDFs
+- object-aware bulk UDFs
 - the current examples use the string-based `nbr` path with cast-back for numeric values
 
 ## Step 7: Row-based usage pattern
@@ -183,9 +181,10 @@ SELECT
   last_name,
   customer_status,
   created_ts,
-  thales_reveal_by_column_with_user(
+  thales_reveal_by_object_and_column_with_user(
     email_token,
     'char',
+    'main.security.customer_protected_internal',
     'email',
     current_user()
   ) AS email
@@ -235,9 +234,10 @@ CREATE OR REPLACE VIEW main.security.v_customer_array_reveal AS
 SELECT
   customer_group_id,
   snapshot_ts,
-  thales_reveal_bulk_by_column_with_user(
+  thales_reveal_bulk_by_object_and_column_with_user(
     email_token_array,
     'char',
+    'main.security.customer_protected_internal_arrays',
     'email',
     current_user()
   ) AS email_array
@@ -294,7 +294,7 @@ Recommended least-privilege pattern:
 
 Use:
 
-- `notebooks/utils/grant_examples.sql`
+- `notebooks/utils/sql/grant_examples.sql`
 
 Recommended model:
 
@@ -333,5 +333,5 @@ Important limitation:
 - `sql_warehouse/samples/sample_tls_smoke_test.py`
 - `notebooks/numbers/numbers_reveal_castback_examples.py`
 - `notebooks/numbers/numbers_reveal_castback_examples.sql`
-- `notebooks/utils/grant_examples.sql`
+- `notebooks/utils/sql/grant_examples.sql`
 

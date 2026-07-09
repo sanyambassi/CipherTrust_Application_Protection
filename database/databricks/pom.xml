@@ -1,14 +1,28 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
-  <groupId>com.thales.databricks.udf</groupId>
-  <artifactId>thales.databricks.udf</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.thales</groupId>
+    <artifactId>thales-databricks-integration</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>thales-databricks-integration</name>
+    <description>Higher-level Databricks integration design scaffolding.</description>
+
     <properties>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-sql_2.12</artifactId>
@@ -16,19 +30,10 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>okhttp</artifactId>
-            <version>4.10.0</version>
-        </dependency>
-        <dependency>
-            <groupId>com.google.code.gson</groupId>
-            <artifactId>gson</artifactId>
-            <version>2.12.1</version>
-        </dependency>
-        <dependency>
-            <groupId>io.github.thalescpl-io.cadp</groupId>
-            <artifactId>CADP_for_JAVA</artifactId>
-            <version>8.18.1.000</version>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+            <version>2.12.18</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 
@@ -36,22 +41,8 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <version>3.7.0</version>
-                <executions>
-                    <execution>
-                        <id>copy-runtime-dependencies</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>copy-dependencies</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}\libs</outputDirectory>
-                            <includeScope>runtime</includeScope>
-                            <excludeArtifactIds>${project.artifactId},log4j-api,log4j-core,slf4j-api,slf4j-nop,commons-logging</excludeArtifactIds>
-                        </configuration>
-                    </execution>
-                </executions>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -67,25 +58,6 @@
                             <shadedArtifactAttached>true</shadedArtifactAttached>
                             <shadedClassifierName>all</shadedClassifierName>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
-                            <artifactSet>
-                                <excludes>
-                                    <exclude>org.apache.logging.log4j:log4j-api</exclude>
-                                    <exclude>org.apache.logging.log4j:log4j-core</exclude>
-                                    <exclude>org.slf4j:slf4j-api</exclude>
-                                    <exclude>org.slf4j:slf4j-nop</exclude>
-                                    <exclude>commons-logging:commons-logging</exclude>
-                                </excludes>
-                            </artifactSet>
-                            <filters>
-                                <filter>
-                                    <artifact>*:*</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/*.SF</exclude>
-                                        <exclude>META-INF/*.DSA</exclude>
-                                        <exclude>META-INF/*.RSA</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
                         </configuration>
                     </execution>
                 </executions>
