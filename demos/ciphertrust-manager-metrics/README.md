@@ -10,6 +10,24 @@ Standalone multi-appliance web app for **CipherTrust Manager** Prometheus metric
 
 Docs: [Prometheus Metrics](https://docs-cybersec.thalesgroup.com/bundle/v2.21-cdsp-cm/page/admin/cm_admin/monitoring/metrics/index.html) · [REST Auth](https://docs-cybersec.thalesgroup.com/bundle/v2.21-cdsp-cm/page/admin/cm_admin/authentication/rest-api/index.html)
 
+Looking for **Healthcheck only?** See Stephen O’Connor’s [CipherTrust Healthcheck Reporter](https://github.com/soconnor73/healthcheck) 
+
+## Screenshots
+
+Full set (dark + light): [`docs/screenshots/`](docs/screenshots/)
+
+![Appliances / Fleet](docs/screenshots/01-appliances-fleet.png)
+
+![Overview](docs/screenshots/02-overview.png)
+
+![Ops · Interfaces security posture](docs/screenshots/06-ops-interfaces.png)
+
+![Host metrics](docs/screenshots/04-host-metrics.png)
+
+![CCKM / Cloud Keys](docs/screenshots/09-connectors-cckm.png)
+
+![Overview (light theme)](docs/screenshots/11-overview-light.png)
+
 ---
 
 ## Deploy with Docker (recommended)
@@ -131,6 +149,8 @@ Open https://127.0.0.1:5050 (HTTPS on by default for local runs).
 CipherTrust Manager, the app downloads `https://<cm-host>/downloads/ksctl_images.zip`
 (no auth) and extracts the right OS binary into `tools/`. The Docker Hub image already
 bundles Linux `ksctl`, so no download is needed there.
+
+If you only need healthchecks (not metrics dashboards), use the independent project [soconnor73/healthcheck](https://github.com/soconnor73/healthcheck) instead.
 
 See [`tools/README.md`](tools/README.md) for manual install / building the image from source.
 
